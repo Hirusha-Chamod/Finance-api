@@ -1,0 +1,142 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- AUTH DOMAIN ---
+
+model User {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  passwordHash    String
+  name            String?
+  currency        String   @default("USD")
+  totalXp         Int      @default(0) // Gamification
+  
+  // Relations
+  personalWallet  Wallet?  @relation("UserPersonalWallet")
+  ownedTeams      Team[]   @relation("TeamOwner")
+  memberships     TeamMember[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Team {
+  id          String   @id @default(uuid())
+  name        String
+  inviteCode  String   @unique
+  
+  ownerId     String
+  owner       User     @relation("TeamOwner", fields: [ownerId], references: [id])
+  members     TeamMember[]
+  wallet      Wallet?  @relation("TeamWallet")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  role      String   @default("MEMBER") // OWNER, MEMBER
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id])
+  
+  joinedAt  DateTime @default(now())
+
+  @@unique([userId, teamId])
+}
+
+// --- FINANCE DOMAIN ---
+
+model Wallet {
+  id          String   @id @default(uuid())
+  type        String   // PERSONAL or TEAM
+  currency    String   @default("USD")
+
+  userId      String?  @unique
+  user        User?    @relation("UserPersonalWallet", fields: [userId], references: [id])
+  
+  teamId      String?  @unique
+  team        Team?    @relation("TeamWallet", fields: [teamId], references: [id])
+
+  transactions Transaction[]
+  categories   Category[]
+  goals        Goal[]
+  budgets      Budget[]
+  
+  createdAt    DateTime @default(now())
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String
+  color     String   @default("#000000")
+  isDefault Boolean  @default(false)
+  
+  walletId  String
+  wallet    Wallet   @relation(fields: [walletId], references: [id])
+  
+  transactions Transaction[]
+  budgets      Budget[]
+}
+
+model Transaction {
+  id          String   @id @default(uuid())
+  amount      Decimal  @db.Decimal(15, 2)
+  type        String   // INCOME, EXPENSE
+  date        DateTime @default(now())
+  description String?
+  
+  walletId    String
+  wallet      Wallet   @relation(fields: [walletId], references: [id])
+  
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id])
+
+  goalId      String?
+  goal        Goal?     @relation(fields: [goalId], references: [id])
+
+  createdAt   DateTime @default(now())
+}
+
+// --- GOALS & BUDGETS ---
+
+model Goal {
+  id            String    @id @default(uuid())
+  name          String
+  targetAmount  Decimal   @db.Decimal(15, 2)
+  currentAmount Decimal   @default(0) @db.Decimal(15, 2)
+  deadline      DateTime?
+  isCompleted   Boolean   @default(false)
+  
+  walletId      String
+  wallet        Wallet    @relation(fields: [walletId], references: [id])
+  
+  transactions  Transaction[]
+
+  createdAt     DateTime @default(now())
+}
+
+model Budget {
+  id          String   @id @default(uuid())
+  amount      Decimal  @db.Decimal(15, 2)
+  cycle       String   // e.g., "2024-01"
+  
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  
+  walletId    String
+  wallet      Wallet   @relation(fields: [walletId], references: [id])
+
+  @@unique([walletId, categoryId, cycle])
+}
