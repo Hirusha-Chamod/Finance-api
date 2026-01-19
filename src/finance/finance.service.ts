@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTransactionDto } from './dto/transaction.dto';
+import { CreateBudgetDto } from './dto/budget.dto';
 
 @Injectable()
 export class FinanceService {
@@ -61,5 +62,100 @@ export class FinanceService {
         categoryId: dto.categoryId || null,
       },
     });
+  }
+
+  // 3. Create a Category (e.g. "Groceries")
+  async createCategory(userId: string, name: string, color: string = '#000000') {
+    const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+
+    return this.prisma.category.create({
+      data: {
+        name,
+        color,
+        walletId: wallet.id,
+        isDefault: false,
+      },
+    });
+  }
+
+  // 4. Get all Categories for the user
+  async getCategories(userId: string) {
+    const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+
+    return this.prisma.category.findMany({
+      where: { walletId: wallet.id },
+    });
+  }
+
+  // 5. Set or Update a Budget
+  async setBudget(userId: string, dto: CreateBudgetDto) {
+    const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+
+    // Upsert: Update if exists, Create if new
+    return this.prisma.budget.upsert({
+      where: {
+        walletId_categoryId_cycle: {
+          walletId: wallet.id,
+          categoryId: dto.categoryId,
+          cycle: dto.cycle,
+        },
+      },
+      update: { amount: dto.amount },
+      create: {
+        amount: dto.amount,
+        cycle: dto.cycle,
+        categoryId: dto.categoryId,
+        walletId: wallet.id,
+      },
+    });
+  }
+
+  // 6. Get Budget Progress (The Dashboard View)
+  async getBudgetProgress(userId: string, cycle: string) {
+    const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+
+    // Get all budgets for this cycle (e.g., Jan 2026)
+    const budgets = await this.prisma.budget.findMany({
+      where: { walletId: wallet.id, cycle },
+      include: { category: true },
+    });
+
+    // Calculate spending for each budget
+    const report = await Promise.all(
+      budgets.map(async (budget) => {
+        // Sum expenses for this category in this month
+        const expenses = await this.prisma.transaction.aggregate({
+          _sum: { amount: true },
+          where: {
+            walletId: wallet.id,
+            categoryId: budget.categoryId,
+            type: 'EXPENSE',
+            // Simple date filter for the month (improvement: use exact dates)
+            date: {
+              gte: new Date(`${cycle}-01`),
+              lt: new Date(`${cycle}-31`), // Rough approximation for now
+            },
+          },
+        });
+
+        const spent = Number(expenses._sum.amount || 0);
+        const limit = Number(budget.amount);
+
+        return {
+          category: budget.category.name,
+          color: budget.category.color,
+          limit: limit,
+          spent: spent,
+          remaining: limit - spent,
+          percentage: Math.round((spent / limit) * 100),
+        };
+      }),
+    );
+
+    return report;
   }
 }
