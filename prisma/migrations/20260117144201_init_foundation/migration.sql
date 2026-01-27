@@ -4,7 +4,7 @@ CREATE TABLE "User" (
     "email" TEXT NOT NULL,
     "passwordHash" TEXT NOT NULL,
     "name" TEXT,
-    "currency" TEXT NOT NULL DEFAULT 'USD',
+    "currency" TEXT NOT NULL DEFAULT 'LKR',
     "totalXp" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -39,7 +39,7 @@ CREATE TABLE "TeamMember" (
 CREATE TABLE "Wallet" (
     "id" TEXT NOT NULL,
     "type" TEXT NOT NULL,
-    "currency" TEXT NOT NULL DEFAULT 'USD',
+    "currency" TEXT NOT NULL DEFAULT 'LKR',
     "userId" TEXT,
     "teamId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

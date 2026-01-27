@@ -28,7 +28,7 @@ export class AuthService {
         personalWallet: {
           create: {
             type: 'PERSONAL',
-            currency: 'USD',
+            currency: 'LKR',
           },
         },
       },

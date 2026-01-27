@@ -21,4 +21,7 @@ export class CreateTransactionDto {
   @IsUUID()
   @IsOptional()
   categoryId?: string;
+
+  @IsOptional()
+  date?: Date;
 }

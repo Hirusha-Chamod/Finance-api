@@ -12,13 +12,15 @@ export class FinanceController {
 
   @Get('summary')
   getWalletSummary(@Request() req) {
-    return this.financeService.getWalletData(req.user.userId);
+    // Calls the updated service method
+    return this.financeService.getWalletSummary(req.user.userId);
   }
 
   @Post('transaction')
   addTransaction(@Request() req, @Body() dto: CreateTransactionDto) {
     return this.financeService.createTransaction(req.user.userId, dto);
   }
+
   @Post('category')
   createCategory(@Request() req, @Body() dto: CreateCategoryDto) {
     return this.financeService.createCategory(req.user.userId, dto.name, dto.color);

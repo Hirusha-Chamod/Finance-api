@@ -16,7 +16,7 @@ model User {
   email           String   @unique
   passwordHash    String
   name            String?
-  currency        String   @default("USD")
+  currency        String   @default("LKR")
   totalXp         Int      @default(0) // Gamification
   
   // Relations
@@ -61,7 +61,7 @@ model TeamMember {
 model Wallet {
   id          String   @id @default(uuid())
   type        String   // PERSONAL or TEAM
-  currency    String   @default("USD")
+  currency    String   @default("LKR")
 
   userId      String?  @unique
   user        User?    @relation("UserPersonalWallet", fields: [userId], references: [id])

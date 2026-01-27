@@ -7,52 +7,70 @@ import { CreateBudgetDto } from './dto/budget.dto';
 export class FinanceService {
   constructor(private prisma: PrismaService) {}
 
-  // 1. Get Wallet Balance & Recent Transactions
-  async getWalletData(userId: string) {
-    // Find the Personal Wallet for this user
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { userId },
-      include: {
-        transactions: {
-          orderBy: { date: 'desc' },
-          take: 5, // Just the last 5 for now
-        },
+  // 1. Get Wallet Summary (Balance + Recent Tx + Monthly Stats)
+  async getWalletSummary(userId: string) {
+    // Find the wallet first
+    const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+
+    // A. Define "This Month" date range
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    // B. Calculate Total Balance (All Time)
+    const totalIncomeAgg = await this.prisma.transaction.aggregate({
+      _sum: { amount: true },
+      where: { walletId: wallet.id, type: 'INCOME' },
+    });
+    const totalExpenseAgg = await this.prisma.transaction.aggregate({
+      _sum: { amount: true },
+      where: { walletId: wallet.id, type: 'EXPENSE' },
+    });
+    
+    const totalBalance = (Number(totalIncomeAgg._sum.amount) || 0) - (Number(totalExpenseAgg._sum.amount) || 0);
+
+    // C. Calculate Monthly Stats (This Month Only)
+    const monthlyIncomeAgg = await this.prisma.transaction.aggregate({
+      _sum: { amount: true },
+      where: {
+        walletId: wallet.id,
+        type: 'INCOME',
+        date: { gte: startOfMonth, lte: endOfMonth },
+      },
+    });
+    const monthlyExpenseAgg = await this.prisma.transaction.aggregate({
+      _sum: { amount: true },
+      where: {
+        walletId: wallet.id,
+        type: 'EXPENSE',
+        date: { gte: startOfMonth, lte: endOfMonth },
       },
     });
 
-    if (!wallet) throw new NotFoundException('Wallet not found');
-
-    // Calculate Balance manually (Income - Expense)
-    const allTransactions = await this.prisma.transaction.findMany({
+    // D. Get Recent Transactions
+    const recentTransactions = await this.prisma.transaction.findMany({
       where: { walletId: wallet.id },
+      orderBy: { date: 'desc' },
+      take: 5,
+      include: { category: true },
     });
-
-    const income = allTransactions
-      .filter((t) => t.type === 'INCOME')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
-
-    const expense = allTransactions
-      .filter((t) => t.type === 'EXPENSE')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
 
     return {
       walletId: wallet.id,
       currency: wallet.currency,
-      balance: income - expense,
-      recentTransactions: wallet.transactions,
+      balance: totalBalance,
+      totalIncome: Number(monthlyIncomeAgg._sum.amount) || 0,
+      totalExpense: Number(monthlyExpenseAgg._sum.amount) || 0,
+      recentTransactions,
     };
   }
 
   // 2. Add a Transaction (Income or Expense)
   async createTransaction(userId: string, dto: CreateTransactionDto) {
-    // First, find the wallet
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { userId },
-    });
-
+    const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
     if (!wallet) throw new NotFoundException('Wallet not found');
 
-    // Create the record
     return this.prisma.transaction.create({
       data: {
         amount: dto.amount,
@@ -60,11 +78,12 @@ export class FinanceService {
         description: dto.description,
         walletId: wallet.id,
         categoryId: dto.categoryId || null,
+        date: dto.date || new Date(),
       },
     });
   }
 
-  // 3. Create a Category (e.g. "Groceries")
+  // 3. Create a Category
   async createCategory(userId: string, name: string, color: string = '#000000') {
     const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
     if (!wallet) throw new NotFoundException('Wallet not found');
@@ -79,7 +98,7 @@ export class FinanceService {
     });
   }
 
-  // 4. Get all Categories for the user
+  // 4. Get all Categories
   async getCategories(userId: string) {
     const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
     if (!wallet) throw new NotFoundException('Wallet not found');
@@ -94,7 +113,6 @@ export class FinanceService {
     const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
     if (!wallet) throw new NotFoundException('Wallet not found');
 
-    // Upsert: Update if exists, Create if new
     return this.prisma.budget.upsert({
       where: {
         walletId_categoryId_cycle: {
@@ -113,31 +131,28 @@ export class FinanceService {
     });
   }
 
-  // 6. Get Budget Progress (The Dashboard View)
+  // 6. Get Budget Progress
   async getBudgetProgress(userId: string, cycle: string) {
     const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
     if (!wallet) throw new NotFoundException('Wallet not found');
 
-    // Get all budgets for this cycle (e.g., Jan 2026)
     const budgets = await this.prisma.budget.findMany({
       where: { walletId: wallet.id, cycle },
       include: { category: true },
     });
 
-    // Calculate spending for each budget
     const report = await Promise.all(
       budgets.map(async (budget) => {
-        // Sum expenses for this category in this month
         const expenses = await this.prisma.transaction.aggregate({
           _sum: { amount: true },
           where: {
             walletId: wallet.id,
             categoryId: budget.categoryId,
             type: 'EXPENSE',
-            // Simple date filter for the month (improvement: use exact dates)
+            // Simple date filter for the month
             date: {
               gte: new Date(`${cycle}-01`),
-              lt: new Date(`${cycle}-31`), // Rough approximation for now
+              lt: new Date(`${cycle}-31`), 
             },
           },
         });
