@@ -10,32 +10,47 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  // 1. REGISTER USER
+ // 1. REGISTER USER
   async register(email: string, password: string, name: string) {
-    // Check if user exists
+    // Check if user exists (Quick check before starting a transaction)
     const existingUser = await this.prisma.user.findUnique({ where: { email } });
     if (existingUser) throw new ConflictException('Email already exists');
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create User AND Personal Wallet in one transaction
-    const user = await this.prisma.user.create({
-      data: {
-        email,
-        passwordHash: hashedPassword,
-        name,
-        personalWallet: {
-          create: {
-            type: 'PERSONAL',
-            currency: 'LKR',
-          },
-        },
-      },
-      include: { personalWallet: true },
-    });
+    // Use $transaction for explicit "All-or-Nothing" logic
+    return this.prisma.$transaction(async (tx) => {
+     // 1. Create the User
+      const user = await tx.user.create({
+        data: { email, passwordHash: hashedPassword, name },
+      });
 
-    return this.generateToken(user.id, user.email, user.name);
+      // 2. Create the Wallet and CAPTURE it in a variable
+      const wallet = await tx.wallet.create({
+        data: {
+          userId: user.id,
+          type: 'PERSONAL',
+          currency: 'LKR',
+        },
+      });
+
+
+      const defaultCategories = [
+        { name: 'Food', color: '#ef4444', walletId: wallet.id },
+        { name: 'Transport', color: '#3b82f6', walletId: wallet.id },
+        { name: 'Shopping', color: '#8b5cf6', walletId: wallet.id },
+        { name: 'Salary', color: '#10b981', walletId: wallet.id },
+      ];
+
+      // Batch create the categories
+      await tx.category.createMany({
+        data: defaultCategories,
+      });
+
+      return this.generateToken(user.id, user.email, user.name);
+
+      
+    });
   }
 
   // 2. LOGIN USER
