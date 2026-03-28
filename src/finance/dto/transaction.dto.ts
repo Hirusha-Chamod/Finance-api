@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import { IsEnum, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export enum TransactionType {
@@ -8,7 +9,7 @@ export enum TransactionType {
 export class CreateTransactionDto {
   @IsNumber()
   @Min(0.01)
-  amount: number;
+  amount!: number;
 
   @IsEnum(TransactionType)
   type: TransactionType;
@@ -24,4 +25,38 @@ export class CreateTransactionDto {
 
   @IsOptional()
   date?: Date;
+}
+
+export class GetTransactionsQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  limit?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsUUID()
+  cursor?: string;
+
+  @IsOptional()
+  @IsEnum(TransactionType)
+  type?: TransactionType;
+
+  @IsOptional()
+  @IsString()
+  @IsUUID()
+  categoryId?: string;
+
+  @IsOptional()
+  @IsString()
+  startDate?: string; // ISO Date string
+
+  @IsOptional()
+  @IsString()
+  endDate?: string; // ISO Date string
+
+  @IsOptional()
+  @IsString()
+  search?: string;
 }

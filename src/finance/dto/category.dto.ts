@@ -8,9 +8,9 @@ export class CreateCategoryDto {
   @IsString()
   @IsHexColor()
   @IsOptional()
-  color?: string; // e.g. "#FF0000"
+  color?: string; 
 
   @IsString()
   @IsOptional()
-  icon?: string; // e.g. "pizza-slice"
+  icon?: string; 
 }

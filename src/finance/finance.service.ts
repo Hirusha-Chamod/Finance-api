@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTransactionDto } from './dto/transaction.dto';
 import { CreateBudgetDto } from './dto/budget.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class FinanceService {
@@ -51,7 +52,10 @@ export class FinanceService {
     // D. Get Recent Transactions
     const recentTransactions = await this.prisma.transaction.findMany({
       where: { walletId: wallet.id },
-      orderBy: { date: 'desc' },
+      orderBy: [
+        { date: 'desc' },
+        { createdAt: 'desc' } 
+      ],
       take: 5,
       include: { category: true },
     });
@@ -136,6 +140,11 @@ export class FinanceService {
     const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
     if (!wallet) throw new NotFoundException('Wallet not found');
 
+    const [year, month] = cycle.split('-');
+
+    const startDate = new Date(Number(year), Number(month) - 1, 1);
+    const endDate = new Date(Number(year), Number(month), 1);
+
     const budgets = await this.prisma.budget.findMany({
       where: { walletId: wallet.id, cycle },
       include: { category: true },
@@ -149,11 +158,10 @@ export class FinanceService {
             walletId: wallet.id,
             categoryId: budget.categoryId,
             type: 'EXPENSE',
-            // Simple date filter for the month
             date: {
-              gte: new Date(`${cycle}-01`),
-              lt: new Date(`${cycle}-31`), 
-            },
+            gte: startDate,
+            lt: endDate, 
+          },
           },
         });
 
@@ -173,4 +181,64 @@ export class FinanceService {
 
     return report;
   }
+
+  async getTransactions(
+    userId: string, 
+    limit: number = 20, 
+    cursor?: string,
+    filters?: { type?: string; categoryId?: string; startDate?: string; endDate?: string; search?: string }
+  ) {
+    const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+
+    
+    const whereClause: Prisma.TransactionWhereInput = { 
+      walletId: wallet.id 
+    };
+
+    if (filters?.type) {
+      whereClause.type = filters.type;
+    }
+    
+    if (filters?.categoryId) {
+      whereClause.categoryId = filters.categoryId;
+    }
+
+    if (filters?.startDate || filters?.endDate) {
+      whereClause.date = {};
+      if (filters.startDate) whereClause.date.gte = new Date(filters.startDate);
+      if (filters.endDate) whereClause.date.lte = new Date(filters.endDate);
+    }
+
+    if (filters?.search) {
+      // mode: 'insensitive' makes it case-insensitive search
+      whereClause.description = { contains: filters.search, mode: 'insensitive' };
+    }
+
+    // Execute query with the dynamic where clause
+    const transactions = await this.prisma.transaction.findMany({
+      where: whereClause,
+      take: limit + 1,
+      skip: cursor ? 1 : 0,
+      ...(cursor && { cursor: { id: cursor } }),
+      orderBy: [
+        { date: 'desc' },
+        { createdAt: 'desc' }
+      ],
+      include: { category: true },
+    });
+
+    let nextCursor: string | null = null;
+    
+    if (transactions.length > limit) {
+      const nextItem = transactions.pop();
+      nextCursor = nextItem!.id;
+    }
+
+    return {
+      data: transactions,
+      nextCursor,
+    };
+  }
 }
+

@@ -1,6 +1,6 @@
-import { Controller, Get, Post, Body, UseGuards, Request, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Request, Param, Query } from '@nestjs/common';
 import { FinanceService } from './finance.service';
-import { CreateTransactionDto } from './dto/transaction.dto';
+import { CreateTransactionDto, GetTransactionsQueryDto } from './dto/transaction.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { CreateCategoryDto } from './dto/category.dto';
 import { CreateBudgetDto } from './dto/budget.dto';
@@ -19,6 +19,25 @@ export class FinanceController {
   @Post('transaction')
   addTransaction(@Request() req, @Body() dto: CreateTransactionDto) {
     return this.financeService.createTransaction(req.user.userId, dto);
+  }
+
+  @Get('transactions')
+  getTransactions(@Request() req, @Query() query: GetTransactionsQueryDto) {
+    // FORCE the limit to be a number (fallback to 20 if it fails parsing)
+    const limit = query.limit ? Number(query.limit) : 20; 
+    
+    return this.financeService.getTransactions(
+      req.user.userId, 
+      limit, // Now this is guaranteed to be an integer (e.g., 20)
+      query.cursor,
+      {
+        type: query.type,
+        categoryId: query.categoryId,
+        startDate: query.startDate,
+        endDate: query.endDate,
+        search: query.search
+      }
+    );
   }
 
   @Post('category')

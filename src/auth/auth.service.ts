@@ -1,5 +1,5 @@
 import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service'; // We need to create this next
+import { PrismaService } from '../prisma/prisma.service'; 
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 
@@ -35,7 +35,7 @@ export class AuthService {
       include: { personalWallet: true },
     });
 
-    return this.generateToken(user.id, user.email);
+    return this.generateToken(user.id, user.email, user.name);
   }
 
   // 2. LOGIN USER
@@ -46,15 +46,15 @@ export class AuthService {
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) throw new UnauthorizedException('Invalid credentials');
 
-    return this.generateToken(user.id, user.email);
+    return this.generateToken(user.id, user.email, user.name);
   }
 
   // Helper: Create JWT Token
-  private generateToken(userId: string, email: string) {
+ private generateToken(userId: string, email: string, name: string | null) { 
     const payload = { sub: userId, email };
     return {
       access_token: this.jwtService.sign(payload),
-      user: { id: userId, email },
+      user: { id: userId, email, name }
     };
   }
 }
