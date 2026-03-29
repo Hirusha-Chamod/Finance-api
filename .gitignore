@@ -1,1 +1,32 @@
-node_modules
+# --- Dependencies ---
+node_modules/
+
+# --- Build Output ---
+dist/
+build/
+*.tsbuildinfo
+
+# --- Environment & Security (CRITICAL) ---
+.env
+.env.test
+.env.production
+# Note: We keep .env.example if you want to share a template later
+
+# --- System Files (Mac/Windows junk) ---
+.DS_Store
+Thumbs.db
+
+# --- Testing & Logs ---
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- IDE Settings (Optional but recommended) ---
+.vscode/
+.idea/
+*.swp
+
+# --- Prisma Generated Client (If customized) ---
+# usually we keep the schema, but ignore the generated client if it's in a weird spot.
+# For now, standard prisma usage doesn't need extra ignores here.
